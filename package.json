@@ -1,0 +1,32 @@
+{
+  "name": "af-dashboard",
+  "version": "1.0.0",
+  "description": "Todo",
+  "main": "process.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node process.js",
+    "debug": "devtool process.js --break"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rw251/af-dashboard.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/rw251/af-dashboard/issues"
+  },
+  "homepage": "https://github.com/rw251/af-dashboard#readme",
+  "dependencies": {
+    "async": "^2.1.2",
+    "csv-parser": "^1.11.0",
+    "exceljs": "^0.2.35",
+    "msexcel-builder-colorfix-intfix": "0.0.2",
+    "unzip": "^0.1.11",
+    "xlsx": "^0.8.0"
+  },
+  "devDependencies": {
+    "devtools": "0.0.0"
+  }
+}
