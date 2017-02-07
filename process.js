@@ -16,10 +16,12 @@ var PATIENT_HEADERS = ["ExpandedUniquePatientID", "ExpandedUniqueTreatmentPlanID
 var INR_HEADERS = ["ExpandedUniqueTreatmentPlanID", "dINRDate", "INR_Value", "pkiTreatmentID", "cStatus"];
 
 var fullLog = [];
+
 var logIt = function(text, notConsole, notFile) {
   if (!notConsole) console.log(text);
   if (!notFile) fullLog.push(text);
 };
+
 var validatePostcode = function(postcode) {
   if (postcode.search(/^([A-Z][A-Z]?[0-9][0-9]? )O([A-Z]{2})$/) > -1) {
     var bits = postcode.match(/^([A-Z][A-Z]?[0-9][0-9]? )O([A-Z]{2})$/);
@@ -35,7 +37,7 @@ var validatePostcode = function(postcode) {
 
 var cleanUpExtractedDir = function() {
   var folders = fs.readdirSync(EXTRACT_DIR);
-  console.log(folders.length + " directories found in extract dir. Deleting...");
+  logIt(folders.length + " directories found in extract dir. Deleting...");
   folders.forEach(function(v) {
     var files = fs.readdirSync(path.join(EXTRACT_DIR, v));
     files.forEach(function(vv) {
@@ -43,14 +45,14 @@ var cleanUpExtractedDir = function() {
     });
     fs.rmdirSync(path.join(EXTRACT_DIR, v));
   });
-  console.log("Extract dir now empty.");
+  logIt("Extract dir now empty.");
 
   var outputFiles = fs.readdirSync(OUTPUT_DIR);
-  console.log(outputFiles.length + " files found in output dir. Deleting...");
+  logIt(outputFiles.length + " files found in output dir. Deleting...");
   outputFiles.forEach(function(v) {
     fs.unlinkSync(path.join(OUTPUT_DIR, v));
   });
-  console.log("Output dir now empty.");
+  logIt("Output dir now empty.");
 };
 
 var loadPostcodeCsvAsync = function(callback) {
@@ -128,7 +130,7 @@ var readPatientCsvAsync = function(filepath, callback) {
       if (data[PATIENT_HEADERS[0]] === PATIENT_HEADERS[0]) return;
 
       if (obj.plans[data[PATIENT_HEADERS[1]]]) {
-        console.log("Already got an ExpandedUniqueTreatmentPlanID for: " + obj.plans[data[PATIENT_HEADERS[1]]]);
+        logIt("Already got an ExpandedUniqueTreatmentPlanID for: " + obj.plans[data[PATIENT_HEADERS[1]]]);
         throw new Error("Uh oh");
       }
       if (!obj.patients[data[PATIENT_HEADERS[0]]]) {
@@ -151,7 +153,7 @@ var readInrCsvAsync = function(filepath, UniqueTreatmentPlanIDs, callback) {
       if (data[INR_HEADERS[0]] === INR_HEADERS[0]) return;
 
       if (UniqueTreatmentPlanIDs.indexOf(data[INR_HEADERS[0]]) === -1) {
-        console.log("Treatment plan id: " + data[INR_HEADERS[0]] + " does not exist in the patient file");
+        logIt("Treatment plan id: " + data[INR_HEADERS[0]] + " does not exist in the patient file");
         throw new Error("Uh oh");
       }
 
@@ -187,7 +189,7 @@ var processTreatmentPlan = function(planList, plan, patient, ccg, maxDate) {
   rtn.ttrlt65 = rtn.ttr < 65;
 
   if (patient.ccg && patient.ccg != ccg) {
-    console.log("Patient appears in two ccgs: " + patient.ExpandedUniquePatientID);
+    logIt("Patient appears in two ccgs: " + patient.ExpandedUniquePatientID);
   }
 
   patient.ccg = ccg;
@@ -205,14 +207,14 @@ var output = {},
   diagnoses = {};
 
 loadPostcodeCsvAsync(function(err, postcodeLookup) {
-  console.log("Postcode lookup loaded.");
-  console.log(Object.keys(postcodeLookup).length + " practices found.");
+  logIt("Postcode lookup loaded.");
+  logIt(Object.keys(postcodeLookup).length + " postcodes found.");
   loadCcgCsvAsync(function(err, ccgLookup) {
-    console.log("CCG lookup loaded.");
-    console.log(Object.keys(ccgLookup).length + " found.");
+    logIt("CCG lookup loaded.");
+    logIt(Object.keys(ccgLookup).length + " found.");
     loadPracticeCsvAsync(function(err, practiceLookup) {
-      console.log("Practice lookup loaded.");
-      console.log(Object.keys(practiceLookup).length + " practices found.");
+      logIt("Practice lookup loaded.");
+      logIt(Object.keys(practiceLookup).length + " practices found.");
 
       //Get all zip files
       fs.readdir(INPUT_DIR, function(err, files) {
@@ -227,25 +229,25 @@ loadPostcodeCsvAsync(function(err, postcodeLookup) {
           var had_error = false;
           unzipStream.on('error', function(err) {
             had_error = true;
-            console.log(err);
+            logIt(err);
           });
           unzipStream.on('close', function() {
             if (!had_error) {
-              //console.log(file + " closed");
+              logIt(file + " closed", true);
             }
             //get files in directory
             var zipFiles = fs.readdirSync(path.join(EXTRACT_DIR, file));
             var inrFile, patientFile;
             if (zipFiles[0].search(/inr/i) > -1) inrFile = zipFiles[0];
             else if (zipFiles[0].search(/pat/i) > -1) patientFile = zipFiles[0];
-            else console.log(zipFiles[0] + " in " + file + " not recognised as inr or patient");
+            else logIt(zipFiles[0] + " in " + file + " not recognised as inr or patient");
 
             if (zipFiles[1].search(/inr/i) > -1) inrFile = zipFiles[1];
             else if (zipFiles[1].search(/pat/i) > -1) patientFile = zipFiles[1];
-            else console.log(zipFiles[1] + " in " + file + " not recognised as inr or patient");
+            else logIt(zipFiles[1] + " in " + file + " not recognised as inr or patient");
 
-            //if (inrFile) console.log("INR file: " + path.join(EXTRACT_DIR, file, inrFile));
-            //if (patientFile) console.log("PAT file: " + path.join(EXTRACT_DIR, file, patientFile));
+            if (inrFile) logIt("INR file: " + path.join(EXTRACT_DIR, file, inrFile), true);
+            if (patientFile) logIt("PAT file: " + path.join(EXTRACT_DIR, file, patientFile), true);
 
             readPatientCsvAsync(path.join(EXTRACT_DIR, file, patientFile), function(err, patients) {
               readInrCsvAsync(path.join(EXTRACT_DIR, file, inrFile), Object.keys(patients.plans), function(err, results, maxDate) {
@@ -316,11 +318,11 @@ loadPostcodeCsvAsync(function(err, postcodeLookup) {
                     }
                     processTreatmentPlan(results[v], patients.plans[v], patients.patients[patients.plans[v].ExpandedUniquePatientID], ccg, maxDate);
                   } else {
-                    console.log("oops - a plan with no patient??" + v);
+                    logIt("oops - a plan with no patient??" + v);
                   }
                 });
 
-                console.log(file + " has " + JSON.stringify(log));
+                logIt(file + " has " + JSON.stringify(log));
 
                 var outputObject = {};
                 Object.keys(ccgs).forEach(function(v) {
@@ -336,12 +338,12 @@ loadPostcodeCsvAsync(function(err, postcodeLookup) {
                 var patientList = Object.keys(patients.patients).forEach(function(v) {
                   if (!patients.patients[v].ttr && patients.patients[v].ttr !== 0) {
                     if (patients.patients[v].ccg) {
-                      console.log("might have some data for: " + v);
+                      logIt("might have some data for: " + v);
                       return;
                     } else {
                       //no ccg
                       //could get it from patient postcode
-                      //console.log("no data for patient: " + v);
+                      logIt("no data for patient: " + v, true);
                       return;
                     }
                   } else {
@@ -430,6 +432,10 @@ loadPostcodeCsvAsync(function(err, postcodeLookup) {
                   workbook3.xlsx.writeFile(path.join(OUTPUT_DIR, 'diagnoses.xlsx'))
                     .then(function() {
                       // done
+                      var file = fs.createWriteStream(path.join(LOG_DIR, 'log.txt'));
+                      file.on('error', function(err) { /* error handling */ });
+                      fullLog.forEach(function(v) { file.write(v + '\n'); });
+                      file.end();
                     });
                 }
               });
