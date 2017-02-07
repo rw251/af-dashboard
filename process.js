@@ -275,20 +275,27 @@ loadPostcodeCsvAsync(function(err, postcodeLookup) {
                     if (patients.plans[v].GP_PracticeCode) {
                       if (!practiceLookup[patients.plans[v].GP_PracticeCode]) {
                         if (patients.plans[v].GP_Postcode) {
-                          if (postcodeLookup[patients.plans[v].GP_Postcode] && ccgLookup[postcodeLookup[patients.plans[v].GP_Postcode]]) {
-                            if (ccgLookup[postcodeLookup[patients.plans[v].GP_Postcode]] != ccg) {
-                              ccg = ccgLookup[postcodeLookup[patients.plans[v].GP_Postcode]];
-                              ccgs[ccg] = 1;
+                          patients.plans[v].GP_Postcode = validatePostcode(patients.plans[v].GP_Postcode);
+                          if (postcodeLookup[patients.plans[v].GP_Postcode]) {
+                            if (ccgLookup[postcodeLookup[patients.plans[v].GP_Postcode]]) {
+                              if (ccgLookup[postcodeLookup[patients.plans[v].GP_Postcode]] != ccg) {
+                                ccg = ccgLookup[postcodeLookup[patients.plans[v].GP_Postcode]];
+                                ccgs[ccg] = 1;
+                              } else {
+                                // do nothing
+                              }
                             } else {
-                              // do nothing
+                              logIt("Practice code not found and ccg lookup not found for " + patients.plans[v].ExpandedUniquePatientID + " | " + postcodeLookup[patients.plans[v].GP_Postcode], true);
+                              log.PracticeCodeNotFoundPostCodeNotFound++;
+                              return;
                             }
                           } else {
-                            //console.log("Practice code not found and postcode not found for " + patients.plans[v].ExpandedUniquePatientID);
+                            logIt("Practice code not found and postcode not found for " + patients.plans[v].ExpandedUniquePatientID + " | " + patients.plans[v].GP_Postcode, true);
                             log.PracticeCodeNotFoundPostCodeNotFound++;
                             return;
                           }
                         } else {
-                          //console.log("Practice code not found and no postcode for " + patients.plans[v].ExpandedUniquePatientID);
+                          logIt("Practice code not found and no postcode for " + patients.plans[v].ExpandedUniquePatientID, true);
                           log.PracticeCodeNotFoundNoPostcode++;
                           return;
                         }
