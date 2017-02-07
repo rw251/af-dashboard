@@ -110,15 +110,24 @@ var loadCcgCsvAsync = function(callback) {
 };
 
 var loadPracticeCsvAsync = function(callback) {
-  var obj = {};
-  fs.createReadStream(path.join(LOOKUP_DIR, 'epraccur.csv'))
-    .pipe(csv({ separator: ',', headers: ["practiceId", "postcode", "ccgid", "ccgname"] }))
+  var extraObj={};
+  fs.createReadStream(path.join(LOOKUP_DIR, 'extra_practice_postcode_lookup.csv'))
+    .pipe(csv({ separator: ',', headers: ["practiceName", "postcode", "ccgid", "ccgname"] }))
     .on('data', function(data) {
-      //ignore headers
-      obj[data.practiceId] = data.ccgname;
+      extraObj[data.practiceName] = data.ccgname;
     })
     .on('err', function(err) { callback(err); })
-    .on('end', function() { callback(null, obj); });
+    .on('end', function() {
+      var obj = {};
+      fs.createReadStream(path.join(LOOKUP_DIR, 'epraccur.csv'))
+        .pipe(csv({ separator: ',', headers: ["practiceId", "postcode", "ccgid", "ccgname"] }))
+        .on('data', function(data) {
+          //ignore headers
+          obj[data.practiceId] = data.ccgname;
+        })
+        .on('err', function(err) { callback(err); })
+        .on('end', function() { callback(null, obj, extraObj); });
+  });
 };
 
 var readPatientCsvAsync = function(filepath, callback) {
@@ -212,9 +221,10 @@ loadPostcodeCsvAsync(function(err, postcodeLookup) {
   loadCcgCsvAsync(function(err, ccgLookup) {
     logIt("CCG lookup loaded.");
     logIt(Object.keys(ccgLookup).length + " found.");
-    loadPracticeCsvAsync(function(err, practiceLookup) {
+    loadPracticeCsvAsync(function(err, practiceLookup, extraLookup) {
       logIt("Practice lookup loaded.");
       logIt(Object.keys(practiceLookup).length + " practices found.");
+      logIt(Object.keys(extraLookup).length + " extra practices found.");
 
       //Get all zip files
       fs.readdir(INPUT_DIR, function(err, files) {
