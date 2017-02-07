@@ -1,4 +1,6 @@
 var csv = require('csv-parser'),
+  progress = require('progress-stream'),
+  ProgressBar = require('progress'),
   fs = require('fs'),
   path = require('path'),
   async = require('async'),
@@ -8,9 +10,28 @@ var csv = require('csv-parser'),
 var INPUT_DIR = './data/input-zips';
 var EXTRACT_DIR = './data/extracted';
 var OUTPUT_DIR = './data/output';
+var LOG_DIR = './log';
 var LOOKUP_DIR = './data/lookup';
 var PATIENT_HEADERS = ["ExpandedUniquePatientID", "ExpandedUniqueTreatmentPlanID", "Location_OuterPostcode", "GP_PracticeCode", "GP_PracticeName", "GP_Postcode", "% Time In Range", "TargetRange_LowerLimit", "TargetRange_UpperLimit", "Diagnosis", "TreatmentPlanStartDate"];
 var INR_HEADERS = ["ExpandedUniqueTreatmentPlanID", "dINRDate", "INR_Value", "pkiTreatmentID", "cStatus"];
+
+var fullLog = [];
+var logIt = function(text, notConsole, notFile) {
+  if (!notConsole) console.log(text);
+  if (!notFile) fullLog.push(text);
+};
+var validatePostcode = function(postcode) {
+  if (postcode.search(/^([A-Z][A-Z]?[0-9][0-9]? )O([A-Z]{2})$/) > -1) {
+    var bits = postcode.match(/^([A-Z][A-Z]?[0-9][0-9]? )O([A-Z]{2})$/);
+    if (bits.length === 3) {
+      logIt(postcode + " CHANGED TO " + bits[1] + "0" + bits[2], true);
+      postcode = bits[1] + "0" + bits[2];
+    } else {
+      logIt("I WANTED TO CHANGE THE POSTCODE " + postcode + " BUT BITS IS NOT LENGTH 3", true);
+    }
+  }
+  return postcode.trim();
+};
 
 var cleanUpExtractedDir = function() {
   var folders = fs.readdirSync(EXTRACT_DIR);
@@ -33,20 +54,50 @@ var cleanUpExtractedDir = function() {
 };
 
 var loadPostcodeCsvAsync = function(callback) {
+  var fileToLoad = path.join(LOOKUP_DIR, 'ccgLookup.csv');
+  //Progress bar stuff
+  var stat = fs.statSync(fileToLoad);
+  var str = progress({
+    length: stat.size,
+    time: 100
+  });
+
+  var bar = new ProgressBar('  loading ' + fileToLoad + ' [:bar] :percent :etas', { total: stat.size, width: 20 });
+
+  str.on('progress', function(progress) {
+    bar.tick(progress.delta);
+  });
+
   var obj = {};
-  fs.createReadStream(path.join(LOOKUP_DIR, 'ccgLookup.csv'))
+  fs.createReadStream(fileToLoad)
+    .pipe(str)
     .pipe(csv({ separator: ',', headers: ["postcode", "ccg"] }))
     .on('data', function(data) {
       //ignore headers
-      obj[data.postcode.replace("  ", " ")] = data.ccg;
+      obj[data.postcode.replace(/ +/g, " ")] = data.ccg;
     })
     .on('err', function(err) { callback(err); })
     .on('end', function() { callback(null, obj); });
 };
 
 var loadCcgCsvAsync = function(callback) {
+  var fileToLoad = path.join(LOOKUP_DIR, 'eccg.csv');
+  //Progress bar stuff
+  var stat = fs.statSync(fileToLoad);
+  var str = progress({
+    length: stat.size,
+    time: 100
+  });
+
+  var bar = new ProgressBar('  loading ' + fileToLoad + ' [:bar] :percent :etas', { total: stat.size, width: 20 });
+
+  str.on('progress', function(progress) {
+    bar.tick(progress.delta);
+  });
+
   var obj = {};
-  fs.createReadStream(path.join(LOOKUP_DIR, 'eccg.csv'))
+  fs.createReadStream(fileToLoad)
+    .pipe(str)
     .pipe(csv({ separator: ',', headers: ["ccg", "name"] }))
     .on('data', function(data) {
       //ignore headers
