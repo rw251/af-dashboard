@@ -22,6 +22,19 @@ var logIt = function(text, notConsole, notFile) {
   if (!notFile) fullLog.push(text);
 };
 
+var validatePracticeCode = function(practice) {
+  if (practice.search(/^([^ ]+) ([A-Z][0-9]{5})$/) > -1) {
+    var bits = practice.match(/^([^ ]+) ([^ ]+)$/);
+    if (bits.length === 3) {
+      logIt(practice + " CHANGED TO " + bits[2], true);
+      practice = bits[2];
+    } else {
+      logIt("I WANTED TO CHANGE THE PRACTICE " + practice + " BUT BITS IS NOT LENGTH 3", true);
+    }
+  }
+  return practice.trim();
+};
+
 var validatePostcode = function(postcode) {
   if (postcode.search(/^([A-Z][A-Z]?[0-9][0-9]? )O([A-Z]{2})$/) > -1) {
     var bits = postcode.match(/^([A-Z][A-Z]?[0-9][0-9]? )O([A-Z]{2})$/);
@@ -110,7 +123,7 @@ var loadCcgCsvAsync = function(callback) {
 };
 
 var loadPracticeCsvAsync = function(callback) {
-  var extraObj={};
+  var extraObj = {};
   fs.createReadStream(path.join(LOOKUP_DIR, 'extra_practice_postcode_lookup.csv'))
     .pipe(csv({ separator: ',', headers: ["practiceName", "postcode", "ccgid", "ccgname"] }))
     .on('data', function(data) {
@@ -127,7 +140,7 @@ var loadPracticeCsvAsync = function(callback) {
         })
         .on('err', function(err) { callback(err); })
         .on('end', function() { callback(null, obj, extraObj); });
-  });
+    });
 };
 
 var readPatientCsvAsync = function(filepath, callback) {
@@ -230,6 +243,9 @@ loadPostcodeCsvAsync(function(err, postcodeLookup) {
       fs.readdir(INPUT_DIR, function(err, files) {
         var items = files.length,
           done = 0;
+
+        logIt(["file", "PracticeCodeNotFoundPostCodeNotFound","PracticeCodeNotFoundNoPostcode","NoPracticeCodePostCodeNotFound","NoPracticeCodeNoPost"].join("|"));
+
         files.forEach(function(file) {
           var stream = fs.createReadStream(path.join(INPUT_DIR, file));
           var unzipStream = unzip.Extract({
@@ -273,6 +289,7 @@ loadPostcodeCsvAsync(function(err, postcodeLookup) {
                 Object.keys(results).forEach(function(v) {
                   if (patients.plans[v]) {
                     if (patients.plans[v].GP_PracticeCode) {
+                      patients.plans[v].GP_PracticeCode = validatePracticeCode(patients.plans[v].GP_PracticeCode);
                       if (!practiceLookup[patients.plans[v].GP_PracticeCode]) {
                         if (patients.plans[v].GP_Postcode) {
                           patients.plans[v].GP_Postcode = validatePostcode(patients.plans[v].GP_Postcode);
@@ -295,9 +312,24 @@ loadPostcodeCsvAsync(function(err, postcodeLookup) {
                             return;
                           }
                         } else {
-                          logIt("Practice code not found and no postcode for " + patients.plans[v].ExpandedUniquePatientID, true);
-                          log.PracticeCodeNotFoundNoPostcode++;
-                          return;
+                          if (patients.plans[v].GP_PracticeName) {
+                            if (extraLookup[patients.plans[v].GP_PracticeName]) {
+                              if (extraLookup[patients.plans[v].GP_PracticeName] != ccg) {
+                                ccg = extraLookup[patients.plans[v].GP_PracticeName];
+                                ccgs[ccg] = 1;
+                              } else {
+                                // do nothing
+                              }
+                            } else {
+                              logIt("Practice code not found and no postcode and not found in extra lookup for " + patients.plans[v].ExpandedUniquePatientID + "| " +patients.plans[v].GP_PracticeName, true);
+                              log.PracticeCodeNotFoundNoPostcode++;
+                              return;
+                            }
+                          } else {
+                            logIt("Practice code not found and no postcode and no practice name for " + patients.plans[v].ExpandedUniquePatientID, true);
+                            log.PracticeCodeNotFoundNoPostcode++;
+                            return;
+                          }
                         }
                       } else if (practiceLookup[patients.plans[v].GP_PracticeCode] !== ccg) {
                         ccg = practiceLookup[patients.plans[v].GP_PracticeCode];
@@ -307,22 +339,44 @@ loadPostcodeCsvAsync(function(err, postcodeLookup) {
                       }
                     } else {
                       if (patients.plans[v].GP_Postcode) {
-                        if (postcodeLookup[patients.plans[v].GP_Postcode] && ccgLookup[postcodeLookup[patients.plans[v].GP_Postcode]]) {
-                          if (ccgLookup[postcodeLookup[patients.plans[v].GP_Postcode]] != ccg) {
-                            ccg = ccgLookup[postcodeLookup[patients.plans[v].GP_Postcode]];
-                            ccgs[ccg] = 1;
+                        patients.plans[v].GP_Postcode = validatePostcode(patients.plans[v].GP_Postcode);
+                        if (postcodeLookup[patients.plans[v].GP_Postcode]) {
+                          if (ccgLookup[postcodeLookup[patients.plans[v].GP_Postcode]]) {
+                            if (ccgLookup[postcodeLookup[patients.plans[v].GP_Postcode]] != ccg) {
+                              ccg = ccgLookup[postcodeLookup[patients.plans[v].GP_Postcode]];
+                              ccgs[ccg] = 1;
+                            } else {
+                              // do nothing
+                            }
                           } else {
-                            // do nothing
+                            logIt("No practice code and ccg lookup not found for " + patients.plans[v].ExpandedUniquePatientID + "| " + postcodeLookup[patients.plans[v].GP_Postcode], true);
+                            log.NoPracticeCodePostCodeNotFound++;
+                            return;
                           }
                         } else {
-                          //console.log("No practice code and postcode not found for " + patients.plans[v].ExpandedUniquePatientID);
+                          logIt("No practice code and postcode not found for " + patients.plans[v].ExpandedUniquePatientID + "| " + patients.plans[v].GP_Postcode, true);
                           log.NoPracticeCodePostCodeNotFound++;
                           return;
                         }
                       } else {
-                        //console.log("No postcode or practice code for " + patients.plans[v].ExpandedUniquePatientID);
-                        log.NoPracticeCodeNoPost++;
-                        return;
+                        if (patients.plans[v].GP_PracticeName) {
+                          if (extraLookup[patients.plans[v].GP_PracticeName]) {
+                            if (extraLookup[patients.plans[v].GP_PracticeName] != ccg) {
+                              ccg = extraLookup[patients.plans[v].GP_PracticeName];
+                              ccgs[ccg] = 1;
+                            } else {
+                              // do nothing
+                            }
+                          } else {
+                            logIt("No postcode or practice code and practice name not found in extra lookup " + patients.plans[v].ExpandedUniquePatientID + " | " + patients.plans[v].GP_PracticeName, true);
+                            log.NoPracticeCodeNoPost++;
+                            return;
+                          }
+                        } else {
+                          logIt("No postcode or practice code or practice name for " + patients.plans[v].ExpandedUniquePatientID, true);
+                          log.NoPracticeCodeNoPost++;
+                          return;
+                        }
                       }
                     }
                     if (!ccg) {
@@ -331,7 +385,7 @@ loadPostcodeCsvAsync(function(err, postcodeLookup) {
                       var x3 = patients.plans[v].GP_Postcode;
                       var x4 = postcodeLookup[patients.plans[v].GP_Postcode];
                       var x5 = ccgLookup[postcodeLookup[patients.plans[v].GP_Postcode]];
-                      console.log("NO CCG:" + patients.plans[v].ExpandedUniquePatientID);
+                      logIt("NO CCG:" + patients.plans[v].ExpandedUniquePatientID);
                     }
                     processTreatmentPlan(results[v], patients.plans[v], patients.patients[patients.plans[v].ExpandedUniquePatientID], ccg, maxDate);
                   } else {
@@ -339,7 +393,7 @@ loadPostcodeCsvAsync(function(err, postcodeLookup) {
                   }
                 });
 
-                logIt(file + " has " + JSON.stringify(log));
+                logIt([file, log.PracticeCodeNotFoundPostCodeNotFound,log.PracticeCodeNotFoundNoPostcode,log.NoPracticeCodePostCodeNotFound,log.NoPracticeCodeNoPost].join("|"));
 
                 var outputObject = {};
                 Object.keys(ccgs).forEach(function(v) {
@@ -393,7 +447,7 @@ loadPostcodeCsvAsync(function(err, postcodeLookup) {
                   var outputArray = [
                     [
                       "CCG",
-                      "Patients-with-2-INR->5-or-1-INR-<8-in-last-6 months",
+                      "Patients-with-2-INR->5-or-1-INR->8-in-last-6 months",
                       "Patients-with-2-INR-<1.5-in-last-6-months",
                       "Patients-with-TTR-<65%",
                       "Number-of-unique-patients-breaching-any-target",
