@@ -7,11 +7,20 @@ var csv = require('csv-parser'),
   unzip = require('unzip'),
   Excel = require('exceljs');
 
-var INPUT_DIR = './data/input-zips';
-var EXTRACT_DIR = './data/extracted';
-var OUTPUT_DIR = './data/output';
+
+var DATA_DIR = './data';
+var LOOKUP_DIR = DATA_DIR +'/lookup';
+var isTest = false;
+
+if(process.argv[2] && process.argv[2]==="test") {
+  DATA_DIR = './testdata';
+  isTest = true;
+}
+
+var INPUT_DIR = DATA_DIR +'/input-zips';
+var EXTRACT_DIR = DATA_DIR +'/extracted';
+var OUTPUT_DIR = DATA_DIR +'/output';
 var LOG_DIR = './log';
-var LOOKUP_DIR = './data/lookup';
 var PATIENT_HEADERS = ["ExpandedUniquePatientID", "ExpandedUniqueTreatmentPlanID", "Location_OuterPostcode", "GP_PracticeCode", "GP_PracticeName", "GP_Postcode", "% Time In Range", "TargetRange_LowerLimit", "TargetRange_UpperLimit", "Diagnosis", "TreatmentPlanStartDate"];
 var INR_HEADERS = ["ExpandedUniqueTreatmentPlanID", "dINRDate", "INR_Value", "pkiTreatmentID", "cStatus"];
 
@@ -208,7 +217,7 @@ var processTreatmentPlan = function(planList, plan, patient, ccg, maxDate) {
   }
 
   rtn.ttr = +plan["% Time In Range"];
-  rtn.ttrlt65 = rtn.ttr < 65;
+  if(plan["% Time In Range"]!=="") rtn.ttrlt65 = rtn.ttr < 65;
 
   if (patient.ccg && patient.ccg != ccg) {
     logIt("Patient appears in two ccgs: " + patient.ExpandedUniquePatientID);
@@ -444,19 +453,49 @@ loadPostcodeCsvAsync(function(err, postcodeLookup) {
                 });
                 done++;
                 if (done === items) {
-                  var outputArray = [
-                    [
-                      "CCG",
-                      "Patients-with-2-INR->5-or-1-INR->8-in-last-6 months",
-                      "Patients-with-2-INR-<1.5-in-last-6-months",
-                      "Patients-with-TTR-<65%",
-                      "Number-of-unique-patients-breaching-any-target",
-                      "Warfarin-Population"
-                    ]
+                  var headers = [
+                    "CCG",
+                    "Patients-with-2-INR->5-or-1-INR->8-in-last-6 months",
+                    "Patients-with-2-INR-<1.5-in-last-6-months",
+                    "Patients-with-TTR-<65%",
+                    "Number-of-unique-patients-breaching-any-target",
+                    "Warfarin-Population"
                   ];
+                  var outputArray = [headers];
                   outputArray = outputArray.concat(Object.keys(output).map(function(v) {
-                    return [v, output[v].counttwo1point5, output[v].counttwo5orone8, output[v].countttrlt65, output[v].countall, output[v].countwarfarin];
+                    return [v, output[v].counttwo5orone8, output[v].counttwo1point5, output[v].countttrlt65, output[v].countall, output[v].countwarfarin];
                   }));
+
+                  if(isTest) {
+                      if(outputArray.length===3) {
+                        console.log("TEST PASSED: outputArray length is 3");
+                      } else {
+                        console.error("TEST FAILED: outputArray length is " + outputArray.length);
+                      }
+
+                      if(outputArray[0].join("|")===headers.join("|")){
+                        console.log("TEST PASSED: outputArray[0] contains the headers");
+                      } else {
+                        console.error("TEST FAILED: outputArray[0] doesn't contains the headers");
+                      }
+
+                      var row1ExpectedOutput="NHS TAMESIDE AND GLOSSOP CCG|18|89|198|218|419";
+                      var row1ActualOutput=outputArray[1].join("|");
+                      var row2ExpectedOutput="NHS OLDHAM CCG|4|26|65|75|199";
+                      var row2ActualOutput=outputArray[2].join("|");
+                      if(row1ActualOutput===row1ExpectedOutput){
+                        console.log("TEST PASSED: outputArray[1] contains the correct figures");
+                      } else {
+                        console.error("TEST FAILED: outputArray[1] contains " + row1ActualOutput + " when it should be " + row1ExpectedOutput);
+                      }
+
+                      if(row2ActualOutput===row2ExpectedOutput){
+                        console.log("TEST PASSED: outputArray[2] contains the hecorrect figuresaders");
+                      } else {
+                        console.error("TEST FAILED: outputArray[2] contains " + row2ActualOutput + " when it should be " + row2ExpectedOutput);
+                      }
+
+                  }
 
                   var workbook = new Excel.Workbook();
                   var now = new Date();
