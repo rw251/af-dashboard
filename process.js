@@ -26,6 +26,15 @@ var INR_HEADERS = ["ExpandedUniqueTreatmentPlanID", "dINRDate", "INR_Value", "pk
 
 var fullLog = [];
 
+var ukDateFormat = function(dateAsString, separator) {
+  if(!separator) separator = "/";
+  var dt = new Date(dateAsString);
+  //add a few hours to ensure date doesn't change with GMT
+  dt.setHours(dt.getHours()+3);
+  dt = dt.toISOString();
+  return [dt.substr(8,2), dt.substr(5,2), dt.substr(0,4)].join(separator);
+};
+
 var logIt = function(text, notConsole, notFile) {
   if (!notConsole) console.log(text);
   if (!notFile) fullLog.push(text);
@@ -231,6 +240,25 @@ var processTreatmentPlan = function(planList, plan, patient, ccg, maxDate) {
 
 };
 
+var getMaxDateFromCCGs = function(ccgs) {
+  // ccgs is object of the form
+  // { "NHS BLAH CCG" : { "31 August" : 122, "1 September" : 35 } }
+  //console.log(JSON.stringify(ccgs));
+  var rtn = {};
+  Object.keys(ccgs).forEach(function(v){
+    var maxPeeps = -1;
+    var dt;
+    Object.keys(ccgs[v]).forEach(function(vv){
+      if(ccgs[v][vv] > maxPeeps) {
+        dt = vv;
+        maxPeeps = ccgs[v][vv];
+      }
+    });
+    rtn[v] = dt;
+  });
+  return rtn;
+};
+
 cleanUpExtractedDir();
 
 var output = {},
@@ -251,7 +279,7 @@ loadPostcodeCsvAsync(function(err, postcodeLookup) {
       //Get all zip files
       fs.readdir(INPUT_DIR, function(err, files) {
         var items = files.length,
-          done = 0;
+          done = 0, globCCGs={};
 
         logIt(["file", "PracticeCodeNotFoundPostCodeNotFound","PracticeCodeNotFoundNoPostcode","NoPracticeCodePostCodeNotFound","NoPracticeCodeNoPost"].join("|"));
 
@@ -286,7 +314,8 @@ loadPostcodeCsvAsync(function(err, postcodeLookup) {
 
             readPatientCsvAsync(path.join(EXTRACT_DIR, file, patientFile), function(err, patients) {
               readInrCsvAsync(path.join(EXTRACT_DIR, file, inrFile), Object.keys(patients.plans), function(err, results, maxDate) {
-                //console.log(maxDate);
+                console.log(path.join(EXTRACT_DIR, file, inrFile), maxDate);
+
                 var ccg = "";
                 var ccgs = {};
                 var log = {
@@ -306,6 +335,9 @@ loadPostcodeCsvAsync(function(err, postcodeLookup) {
                             if (ccgLookup[postcodeLookup[patients.plans[v].GP_Postcode]]) {
                               if (ccgLookup[postcodeLookup[patients.plans[v].GP_Postcode]] != ccg) {
                                 ccg = ccgLookup[postcodeLookup[patients.plans[v].GP_Postcode]];
+                                if(!globCCGs[ccg]) globCCGs[ccg]={};
+                                if(!globCCGs[ccg][maxDate]) globCCGs[ccg][maxDate]=0;
+                                globCCGs[ccg][maxDate]++;
                                 ccgs[ccg] = 1;
                               } else {
                                 // do nothing
@@ -325,6 +357,9 @@ loadPostcodeCsvAsync(function(err, postcodeLookup) {
                             if (extraLookup[patients.plans[v].GP_PracticeName]) {
                               if (extraLookup[patients.plans[v].GP_PracticeName] != ccg) {
                                 ccg = extraLookup[patients.plans[v].GP_PracticeName];
+                                if(!globCCGs[ccg]) globCCGs[ccg]={};
+                                if(!globCCGs[ccg][maxDate]) globCCGs[ccg][maxDate]=0;
+                                globCCGs[ccg][maxDate]++;
                                 ccgs[ccg] = 1;
                               } else {
                                 // do nothing
@@ -342,6 +377,9 @@ loadPostcodeCsvAsync(function(err, postcodeLookup) {
                         }
                       } else if (practiceLookup[patients.plans[v].GP_PracticeCode] !== ccg) {
                         ccg = practiceLookup[patients.plans[v].GP_PracticeCode];
+                        if(!globCCGs[ccg]) globCCGs[ccg]={};
+                        if(!globCCGs[ccg][maxDate]) globCCGs[ccg][maxDate]=0;
+                        globCCGs[ccg][maxDate]++;
                         ccgs[ccg] = 1;
                       } else {
                         // do nothing
@@ -353,6 +391,9 @@ loadPostcodeCsvAsync(function(err, postcodeLookup) {
                           if (ccgLookup[postcodeLookup[patients.plans[v].GP_Postcode]]) {
                             if (ccgLookup[postcodeLookup[patients.plans[v].GP_Postcode]] != ccg) {
                               ccg = ccgLookup[postcodeLookup[patients.plans[v].GP_Postcode]];
+                              if(!globCCGs[ccg]) globCCGs[ccg]={};
+                              if(!globCCGs[ccg][maxDate]) globCCGs[ccg][maxDate]=0;
+                              globCCGs[ccg][maxDate]++;
                               ccgs[ccg] = 1;
                             } else {
                               // do nothing
@@ -372,6 +413,9 @@ loadPostcodeCsvAsync(function(err, postcodeLookup) {
                           if (extraLookup[patients.plans[v].GP_PracticeName]) {
                             if (extraLookup[patients.plans[v].GP_PracticeName] != ccg) {
                               ccg = extraLookup[patients.plans[v].GP_PracticeName];
+                              if(!globCCGs[ccg]) globCCGs[ccg]={};
+                              if(!globCCGs[ccg][maxDate]) globCCGs[ccg][maxDate]=0;
+                              globCCGs[ccg][maxDate]++;
                               ccgs[ccg] = 1;
                             } else {
                               // do nothing
@@ -453,17 +497,19 @@ loadPostcodeCsvAsync(function(err, postcodeLookup) {
                 });
                 done++;
                 if (done === items) {
+                  var ccgMaxDateLookup = getMaxDateFromCCGs(globCCGs);
                   var headers = [
                     "CCG",
                     "Patients-with-2-INR->5-or-1-INR->8-in-last-6 months",
                     "Patients-with-2-INR-<1.5-in-last-6-months",
                     "Patients-with-TTR-<65%",
                     "Number-of-unique-patients-breaching-any-target",
-                    "Warfarin-Population"
+                    "Warfarin-Population",
+                    "Date of data extract"
                   ];
                   var outputArray = [headers];
                   outputArray = outputArray.concat(Object.keys(output).map(function(v) {
-                    return [v, output[v].counttwo5orone8, output[v].counttwo1point5, output[v].countttrlt65, output[v].countall, output[v].countwarfarin];
+                    return [v, output[v].counttwo5orone8, output[v].counttwo1point5, output[v].countttrlt65, output[v].countall, output[v].countwarfarin, ukDateFormat(ccgMaxDateLookup[v])];
                   }));
 
                   if(isTest) {
@@ -479,9 +525,9 @@ loadPostcodeCsvAsync(function(err, postcodeLookup) {
                         console.error("TEST FAILED: outputArray[0] doesn't contains the headers");
                       }
 
-                      var row1ExpectedOutput="NHS TAMESIDE AND GLOSSOP CCG|18|89|198|218|419";
+                      var row1ExpectedOutput="NHS TAMESIDE AND GLOSSOP CCG|18|89|198|218|419|31/08/2016";
                       var row1ActualOutput=outputArray[1].join("|");
-                      var row2ExpectedOutput="NHS OLDHAM CCG|4|26|65|75|199";
+                      var row2ExpectedOutput="NHS OLDHAM CCG|4|26|65|75|199|31/08/2016";
                       var row2ActualOutput=outputArray[2].join("|");
                       if(row1ActualOutput===row1ExpectedOutput){
                         console.log("TEST PASSED: outputArray[1] contains the correct figures");
